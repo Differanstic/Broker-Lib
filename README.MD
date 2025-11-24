@@ -1,15 +1,3 @@
-## Installation
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-```python
-## Installation
-```bash
-pip install -r requirements.txt
-```
-
 ## Usage
 ```python
 from Broker.fyers import fyers_util
