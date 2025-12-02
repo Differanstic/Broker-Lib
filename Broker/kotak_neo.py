@@ -147,3 +147,4 @@ class KotakNeo:
             pnl_df['net'] = pnl_df['pnl'] - pnl_df['charges']
         except Exception as e:
             print(f"Error: {e}")
+        return pnl_df
