@@ -1,2 +1,2 @@
-from .fyers import fyers_util
+from . import utils
 from .kotak_neo import KotakNeo

@@ -1,5 +1,5 @@
 import neo_api_client
-import utils
+from . import utils
 import pyotp
 import json
 import pandas as pd
