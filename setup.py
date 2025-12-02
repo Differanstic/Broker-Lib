@@ -6,7 +6,7 @@ setup(
     version="1.1.0",
     author="SadalSuud",
     author_email="kathancpandya@gmail.com",
-    description="Indian Stock Market Broker's Library",
+    description="Kotak Neo Simplified Library",
     packages=find_packages(),
     install_requires=requirements,
     python_requires=">=3.9",

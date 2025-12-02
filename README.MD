@@ -26,11 +26,6 @@ You can store your credentials in a `config.json` file. Use `config.json.example
 
 ```json
 {
-    "fyers": {
-        "client_id": "YOUR_CLIENT_ID",
-        "secret_key": "YOUR_SECRET_KEY",
-        "pin": "YOUR_PIN"
-    },
     "kotak": {
         "consumer_key": "YOUR_CONSUMER_KEY",
         "mobile_number": "YOUR_MOBILE_NUMBER",

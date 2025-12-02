@@ -1,14 +1,11 @@
 {
-    "fyers": {
-        "client_id": "YOUR_CLIENT_ID",
-        "secret_key": "YOUR_SECRET_KEY",
-        "pin": "YOUR_PIN"
-    },
+   
     "kotak": {
         "consumer_key": "YOUR_CONSUMER_KEY",
         "mobile_number": "YOUR_MOBILE_NUMBER",
         "ucc": "YOUR_UCC",
         "mpin": "YOUR_MPIN",
         "totp_secret": "YOUR_TOTP_SECRET"
+        "db_path":"E:/tp/"
     }
 }

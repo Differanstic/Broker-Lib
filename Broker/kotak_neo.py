@@ -1,7 +1,8 @@
 import neo_api_client
-import os
+import utils
 import pyotp
 import json
+import pandas as pd
 
 class KotakNeo:
     def __init__(self, config_path=None, consumer_key=None, mobile_number=None, ucc=None, mpin=None, totp_secret=None):
@@ -84,3 +85,65 @@ class KotakNeo:
     def logout(self):
         return self.client.logout()
 
+    def net_pnl(self,bot_trade:bool):
+        try:
+            data = self.client.order_report()['data']
+            keys = ['exCfmTm','exSeg','avgPrc','qty','sym','stkPrc','optTp','trnsTp','stat']
+            df = pd.DataFrame(data)
+            df = df[keys]
+            df.rename(columns={'exCfmTm':'timestamp','exSeg':'segment','avgPrc':'price','sym':'symbol','stkPrc':'strike','optTp':'option_type','trnsTp':'order_type'},inplace=True)
+
+            df['timestamp'] = pd.to_datetime(
+                df['timestamp'],
+                format='%d-%b-%Y %H:%M:%S',
+                errors='coerce'
+            )
+            df['price'] = pd.to_numeric(df['price'])
+            df['qty'] = pd.to_numeric(df['qty'])
+            df.sort_values(by='timestamp',inplace=True)
+
+
+            group_cols = ['symbol', 'strike', 'option_type']
+
+            results = []
+
+            for grp, g in df.groupby(group_cols):
+                g = g.reset_index(drop=True)
+
+                buys  = g[g['order_type'] == 'B']
+                sells = g[g['order_type'] == 'S']
+
+                # match buy–sell sequentially (FIFO)
+                for i in range(min(len(buys), len(sells))):
+                    buy_price  = buys.iloc[i]['price']
+                    sell_price = sells.iloc[i]['price']
+                    qty        = buys.iloc[i]['qty']
+
+                    pnl = (sell_price - buy_price) * qty
+
+                    results.append({
+                        "symbol": grp[0],
+                        "strike": grp[1],
+                        "option_type": grp[2],
+                        "buy_time": buys.iloc[i]['timestamp'],
+                        "sell_time": sells.iloc[i]['timestamp'],
+                        "buy_price": buy_price,
+                        "sell_price": sell_price,
+                        "qty": qty,
+                        "pnl": pnl
+                    })
+
+            pnl_df = pd.DataFrame(results)
+
+            pnl_df['charges'] = pnl_df.apply(
+                lambda row: utils.calculate_options_charges(
+                    row['buy_price'],
+                    row['sell_price'],
+                    row['qty'],
+                    brokerage= 20 if not bot_trade else 0
+                )['total_charges'],
+                axis=1
+            )
+            pnl_df['net'] = pnl_df['pnl'] - pnl_df['charges']
+        except Exception as e:
+            print(f"Error: {e}")
