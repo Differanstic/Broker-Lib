@@ -12,7 +12,6 @@ pip install -r requirements.txt
 
 ## Usage
 ```python
-from Broker.fyers import fyers_util
 from Broker.kotak_neo import KotakNeo
 
 # Initialize with config file path

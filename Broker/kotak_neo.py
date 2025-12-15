@@ -3,9 +3,13 @@ from . import utils
 import pyotp
 import json
 import pandas as pd
+from typing import Tuple, List, Dict, Any
+from datetime import datetime
+import os
+
 
 class KotakNeo:
-    def __init__(self, config_path=None, consumer_key=None, mobile_number=None, ucc=None, mpin=None, totp_secret=None):
+    def __init__(self, config_path=None, consumer_key=None, mobile_number=None, ucc=None, mpin=None, totp_secret=None,record_path = ''):
         if config_path:
             with open(config_path, 'r') as f:
                 config = json.load(f)
@@ -26,7 +30,18 @@ class KotakNeo:
             raise ValueError("Missing Kotak Neo credentials. Provide them via config_path or direct arguments.")
 
         self.client = neo_api_client.NeoAPI(environment="PROD", consumer_key=self.consumer_key)
+        self.record_path = record_path
         self._login()
+        
+    def _recorder(self ,res:dict, filename:str):
+        df = pd.DataFrame([res])
+        df['timestamp'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.record_path = self.record_path.rstrip("/\\")
+        path = os.path.join(self.record_path, filename)
+        if not os.path.exists(path):
+            df.to_csv(path, index=False)
+        else:
+            df.to_csv(path, mode='a', header=False, index=False)
 
     def _login(self):
         totp = pyotp.TOTP(self.totp_secret)
@@ -34,6 +49,7 @@ class KotakNeo:
         print(x)
         x = self.client.totp_validate(mpin=self.mpin)
         print(x)
+        self._recorder(x,'kotak-login.csv')
         
 
         
@@ -52,6 +68,25 @@ class KotakNeo:
             last_traded_price=last_traded_price, trailing_stop_loss=trailing_stop_loss,
             trailing_sl_value=trailing_sl_value
         )
+    
+    def place_market_order(self,exchange_segment:str,symbol:str,quantity:str,transaction_type:str):
+        entry_price = -1
+        res = self.place_order(exchange_segment=exchange_segment,trading_symbol=symbol,quantity=quantity,transaction_type=transaction_type,validity="DAY",product='NRML',price="0",order_type="MKT")
+
+        if res['stat'] == 'Ok' or res['stCode'] == 200:
+            nOrdNo = res['nOrdNo']
+            is_completed, order = self.order_status(nOrdNo=nOrdNo)
+            self._recorder(order,'kotak-order.csv')
+            if is_completed:
+                trade_report = self.trade_report(nOrdNo=nOrdNo)
+                entry_price = float(trade_report['avgPrc'])
+                
+                self._recorder(trade_report,'kotak-trade.csv')
+        else:
+            print(res)
+            
+                
+        return entry_price
 
     def modify_order(self, order_id, price, quantity, disclosed_quantity="0", trigger_price="0",
                      validity="DAY", order_type=''):
@@ -64,11 +99,24 @@ class KotakNeo:
     def cancel_order(self, order_id):
         return self.client.cancel_order(order_id=order_id)
 
+    
     def order_report(self):
-        return self.client.order_report()
+        orders = self.client.order_report()
+        return orders
+    
+    def order_status(self,nOrdNo:str):
+        
+        orders = self.order_report()
+        for order in orders['data']:
+            if nOrdNo == order['nOrdNo'] :
+                status = (order['ordSt'] == 'complete')
+                return status,order
 
-    def trade_report(self):
-        return self.client.trade_report()
+    def trade_report(self,nOrdNo=None):
+        if nOrdNo:
+            return self.client.trade_report(order_id = nOrdNo)['data']
+        else:
+            return self.client.trade_report()
 
     def positions(self):
         return self.client.positions()
@@ -78,12 +126,62 @@ class KotakNeo:
 
     def limits(self, segment="ALL", exchange="ALL", product="ALL"):
         return self.client.limits(segment=segment, exchange=exchange, product=product)
+    
+    def available_funds(self):
+        return float(self.limits()['Net'])
 
     def scrip_master(self, exchange_segment=""):
         return self.client.scrip_master(exchange_segment=exchange_segment)
 
     def logout(self):
         return self.client.logout()
+
+    
+    
+
+    def open_positions(self) -> Tuple[bool, List[Dict[str, Any]]]:
+        """
+        Fetch and return the list of open trading positions.
+
+        A position is considered "open" when:
+            flSellQty != flBuyQty
+
+        Returns
+        -------
+        Tuple[bool, List[Dict[str, Any]]]
+            - in_position (bool): True if there is at least one open position.
+            - open_positions (list): List of open position dictionaries.
+
+        Notes
+        -----
+        - This function expects `neo.positions()` to return a dictionary 
+          with a 'data' key containing a list of positions.
+        - Safe for production: includes error handling & correct filtering.
+        """
+
+        open_positions: List[Dict[str, Any]] = []
+
+        try:
+            positions = self.positions()
+
+            # Validate response format
+            if not isinstance(positions, dict) or "data" not in positions:
+                raise ValueError("Invalid response structure from neo.positions()")
+
+            for position in positions["data"]:
+                # Check mismatch in buy vs sell quantities
+                if position.get("flSellQty") != position.get("flBuyQty"):
+                    open_positions.append(position)
+
+            in_position = len(open_positions) > 0
+            return in_position, open_positions
+
+        except Exception as e:
+            # In production, log the error instead of printing
+            print(f"[ERROR] Failed to fetch open positions: {e}")
+            return False, []
+
+
 
     def net_pnl(self,bot_trade:bool):
         try:
@@ -148,3 +246,5 @@ class KotakNeo:
         except Exception as e:
             print(f"Error: {e}")
         return pnl_df
+    
+    
